@@ -54,4 +54,5 @@ type ProjectTask struct {
 	TimeSpentHours    int
 	Epic              ProjectEpic
 	Comments          []ProjectComment
+	PublicHtmlUrl     string
 }
