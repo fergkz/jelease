@@ -1,0 +1,12 @@
+# rename to config.yml
+jira:
+  username: "xxx@xxxxx.com.br"
+  accessToken: "xxxxxxxxxxxxxxx"
+  hostname: "https://xxxxxxxx.atlassian.net"
+server:
+  port: 80
+  method: http
+team:
+  - email: xxx.xxx@xxxxxxxxxx.com.br
+    displayName: Xxxx xxxxxx
+    office: Exemple Software Engineering
