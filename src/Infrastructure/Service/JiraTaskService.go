@@ -12,6 +12,7 @@ import (
 
 type JiraTaskService struct {
 	jiraQueryService *jiraQueryService
+	hostname         string
 }
 
 func NewJiraTaskService(
@@ -21,6 +22,7 @@ func NewJiraTaskService(
 ) *JiraTaskService {
 	service := new(JiraTaskService)
 	service.jiraQueryService = NewJiraQueryService(Username, AccessToken, Hostname)
+	service.hostname = Hostname
 	return service
 }
 
@@ -198,6 +200,8 @@ func (service JiraTaskService) parseToTasks(rows []interface{}, sprints []Domain
 				Task.Planned = true
 			}
 		}
+
+		Task.PublicHtmlUrl = service.hostname + "/browse/" + Task.Key
 
 		Tasks = append(Tasks, Task)
 	}
