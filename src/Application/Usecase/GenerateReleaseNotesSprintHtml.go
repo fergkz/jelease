@@ -52,18 +52,20 @@ func (usecase *generateReleaseNotesSprintHtml) Run(sprintIds []DomainEntity.Proj
 
 			if strings.HasPrefix(comment.Body, "RELEASE NOTES") {
 
-				cTitle, cDescr, cType, cSystem := usecase.parseComment(comment.Body)
+				cIgnore, cTitle, cDescr, cType, cSystem := usecase.parseComment(comment.Body)
 
-				note := usecase.taskToNote(task, cTitle, cDescr, cType, cSystem)
+				if !cIgnore {
+					note := usecase.taskToNote(task, cTitle, cDescr, cType, cSystem)
 
-				for _, m := range note.Assignees {
-					membersMap[m.Email] = m
-				}
+					for _, m := range note.Assignees {
+						membersMap[m.Email] = m
+					}
 
-				if cSystem != "" {
-					systemNotes[cSystem] = append(systemNotes[cSystem], note)
-				} else {
-					systemNotes[task.Epic.Summary] = append(systemNotes[task.Epic.Summary], note)
+					if cSystem != "" {
+						systemNotes[cSystem] = append(systemNotes[cSystem], note)
+					} else {
+						systemNotes[task.Epic.Summary] = append(systemNotes[task.Epic.Summary], note)
+					}
 				}
 
 				taskNoteIsset[task.Key] = true
@@ -151,11 +153,17 @@ func (usecase *generateReleaseNotesSprintHtml) taskToNote(task DomainEntity.Proj
 	return note
 }
 
-func (usecase *generateReleaseNotesSprintHtml) parseComment(comment string) (title string, description string, ctype string, csystem string) {
+func (usecase *generateReleaseNotesSprintHtml) parseComment(comment string) (ignore bool, title string, description string, ctype string, csystem string) {
 
 	sc := strings.Split(comment, "\n")
 
+	ignore = false
+
 	for _, t := range sc {
+		if strings.HasPrefix(t, "IGNORE") {
+			ignore = true
+			break
+		}
 		if strings.HasPrefix(t, "Title:") {
 			sctitle := strings.Split(t, "Title:")
 			title = strings.Trim(sctitle[1], " ")
@@ -174,5 +182,5 @@ func (usecase *generateReleaseNotesSprintHtml) parseComment(comment string) (tit
 		}
 	}
 
-	return title, description, ctype, csystem
+	return ignore, title, description, ctype, csystem
 }

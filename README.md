@@ -57,9 +57,11 @@ Para formatar mensagens de release notes, o `Jelease` está utilizando a seguint
 ```
 RELEASE NOTES
 
+IGNORE (Se colocar esta informação, não necessita nenhuma outra abaixo e a atividade será ignorada nas notas de atualização)
+
 Title: <Título curto da nota de atualização>
 
-Description: <Descrição amigável do que foi executado nesta nota de atualização>
+Description: <Descrição amigável do que foi executado nesta nota de atualização (sem quebras de linha)>
 
 Type: <Tipo de atualização: Ex: "Suporte / Sustentação", "Melhoria de usabilidade"...>
 
