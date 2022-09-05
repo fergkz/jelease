@@ -20,7 +20,7 @@ Antes de começar, verifique se você atendeu aos seguintes requisitos:
 * Você instalou no mínimo a versão do `go 1.16`
 * Você tem uma máquina `Windows / Linux / Mac`
 
-## 🚀 Instalando `Jelease`
+## 🚀 Instalando o `Jelease`
 
 Para instalar o `Jelease`, siga estas etapas:
 
@@ -32,9 +32,26 @@ Para instalar o `Jelease`, siga estas etapas:
 * Copie o arquivo `template-example.twig` e renomeie para `template.twig`
 * Edite o arquivo `template.twig` de acordo com o layout que deseja
 
+## ☕ Compilando o `Jelease`
 
-## ☕ Usando `Jelease`
+Você pode compilar este serviço para rodar diretamente na sua máquina, basta executar os comandos:
 
+### Linux
+```
+> $Env:GOOS = "linux"; $Env:GOARCH = "amd64"
+> go build -o launcher .
+```
+
+### Windows
+```
+> $Env:GOOS = "windows"; $Env:GOARCH = "amd64"
+> go build -o launcher.exe .
+```
+
+
+## 🏁 Usando o `Jelease`
+
+### Formatando mensagens
 Para formatar mensagens de release notes, o `Jelease` está utilizando a seguinte formatação:
 
 ```
@@ -50,7 +67,12 @@ System: <Nome do sistema / módulo>
 ```
 Basta fazer um comentário em uma atividade (atividade pai) no formato acima e já estará disponível no documento de atualização.
 
-Rodando o `Jelease`:
+### Rodando o `Jelease` compilado:
+
+* Basta executar o arquivo `laucher` no linux ou `launcher.exe` no windows
+* Acesse do seu navegador a url `http://localhost/sprint/{NÚMERO_DA_SPRINT}`
+
+### Rodando o `Jelease` em desenvolvimento:
 
 * Execute o comando `go run .`
 * Acesse do seu navegador a url `http://localhost/sprint/{NÚMERO_DA_SPRINT}`
