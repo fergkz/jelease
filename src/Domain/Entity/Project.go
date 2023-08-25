@@ -32,12 +32,14 @@ type ProjectComment struct {
 type ProjectSprintId int
 
 type ProjectSprint struct {
-	Id           ProjectSprintId
-	Name         string
-	State        string
-	StartDate    time.Time
-	EndDate      time.Time
-	CompleteDate time.Time
+	Id            ProjectSprintId
+	Name          string
+	State         string
+	StartDate     time.Time
+	EndDate       time.Time
+	CompleteDate  time.Time
+	OriginBoardId int
+	Goal          string
 }
 
 type ProjectTask struct {
@@ -57,4 +59,21 @@ type ProjectTask struct {
 	Objective         string
 	TaskType          string
 	PublicHtmlUrl     string
+}
+
+type ProjectBoardId int
+
+type ProjectBoard struct {
+	Id       ProjectBoardId
+	Name     string
+	Type     string
+	Location struct {
+		ProjectId      int
+		DisplayName    string
+		ProjectName    string
+		ProjectKey     string
+		ProjectTypeKey string
+		AvatarURI      string
+		Name           string
+	}
 }

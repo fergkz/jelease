@@ -77,9 +77,11 @@ func (service jiraQueryService) GetSprints(SprintIds []DomainEntity.ProjectSprin
 		service.api("GET", url, &response)
 
 		sprint := DomainEntity.ProjectSprint{
-			Id:    DomainEntity.ProjectSprintId(response.Id),
-			Name:  response.Name,
-			State: response.State,
+			Id:            DomainEntity.ProjectSprintId(response.Id),
+			Name:          response.Name,
+			State:         response.State,
+			OriginBoardId: response.OriginBoardId,
+			Goal:          response.Goal,
 		}
 
 		if response.StartDate != nil {
@@ -96,6 +98,15 @@ func (service jiraQueryService) GetSprints(SprintIds []DomainEntity.ProjectSprin
 	}
 
 	return rows
+}
+
+func (service jiraQueryService) GetBoardData(BoardId DomainEntity.ProjectBoardId) DomainEntity.ProjectBoard {
+	url := service.Hostname + "/rest/agile/1.0/board/" + strconv.Itoa(int(BoardId))
+
+	response := new(DomainEntity.ProjectBoard)
+	service.api("GET", url, &response)
+
+	return *response
 }
 
 func (service jiraQueryService) api(method string, url string, responseFull interface{}) (err error) {
