@@ -1,0 +1,37 @@
+# .github/actions/main.yml
+
+on:
+  push:
+    branches:
+      - main
+name: 🚀 Deploy website on push
+jobs:
+  web-deploy:
+    name: 🎉 Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🚚 Get latest code
+        uses: actions/checkout@v2
+
+      - name: 🔨 Set up Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.18
+      
+      - name: 🔨 Build Project
+        run: |
+          go build -tags server -o bin-linux-server.fcgi .
+
+      - name: 📂 Sync files
+        run: |
+          rsync -a \
+          --include=bin-linux-server.fcgi \
+          --exclude='*' \
+          -e 'sshpass -p ${{ secrets.SSH_PASSWORD }} ssh -o StrictHostKeyChecking=no -p ${{ vars.SSH_PORT }} -l ${{ secrets.SSH_USERNAME }}' ./ ${{ vars.SSH_HOST }}:${{ vars.SSH_PATH }}
+
+      - name: 📂 Chmod files
+        run: |
+          sshpass -p ${{ secrets.SSH_PASSWORD }} ssh -o StrictHostKeyChecking=no -p ${{ vars.SSH_PORT }} ${{ secrets.SSH_USERNAME }}@${{ vars.SSH_HOST }} \
+          'cd ${{ vars.SSH_PATH }}; \n
+          chmod 0744 bin-linux-server.fcgi'
