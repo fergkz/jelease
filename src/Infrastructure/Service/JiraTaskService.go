@@ -11,18 +11,24 @@ import (
 )
 
 type JiraTaskService struct {
-	jiraQueryService *jiraQueryService
-	hostname         string
+	jiraQueryService     *jiraQueryService
+	hostname             string
+	CustomFieldObjective string
+	CustomFieldTaskType  string
 }
 
 func NewJiraTaskService(
 	Username string,
 	AccessToken string,
 	Hostname string,
+	CustomFieldObjective string,
+	CustomFieldTaskType string,
 ) *JiraTaskService {
 	service := new(JiraTaskService)
 	service.jiraQueryService = NewJiraQueryService(Username, AccessToken, Hostname)
 	service.hostname = Hostname
+	service.CustomFieldObjective = CustomFieldObjective
+	service.CustomFieldTaskType = CustomFieldTaskType
 	return service
 }
 
@@ -50,9 +56,9 @@ func (service JiraTaskService) GetTasksFromSprints(SprintIds []DomainEntity.Proj
 func (service JiraTaskService) parseToTasks(rows []interface{}, sprints []DomainEntity.ProjectSprint) (Tasks []DomainEntity.ProjectTask) {
 
 	type taskDTOStruct struct {
-		Id     int `json:",string"`
-		Key    string
-		Fields struct {
+		Id           int `json:",string"`
+		Key          string
+		FieldsStruct struct {
 			Summary   string
 			Issuetype struct {
 				Name           string
@@ -119,6 +125,7 @@ func (service JiraTaskService) parseToTasks(rows []interface{}, sprints []Domain
 				}
 			}
 		}
+		FieldsMap map[string]interface{} `json:"fields"`
 	}
 
 	allDTOs := map[string]taskDTOStruct{}
@@ -128,9 +135,13 @@ func (service JiraTaskService) parseToTasks(rows []interface{}, sprints []Domain
 		dto := new(taskDTOStruct)
 		byteRow, _ := json.Marshal(row)
 		json.Unmarshal(byteRow, &dto)
+
+		dbByte, _ := json.Marshal(dto.FieldsMap)
+		_ = json.Unmarshal(dbByte, &dto.FieldsStruct)
+
 		allDTOs[dto.Key] = *dto
 
-		if !dto.Fields.Issuetype.Subtask {
+		if !dto.FieldsStruct.Issuetype.Subtask {
 			allOrderedKeys = append(allOrderedKeys, dto.Key)
 		}
 	}
@@ -141,21 +152,33 @@ func (service JiraTaskService) parseToTasks(rows []interface{}, sprints []Domain
 		Task := DomainEntity.ProjectTask{}
 
 		Task.Key = dto.Key
-		Task.Summary = dto.Fields.Summary
-		Task.Type = dto.Fields.Issuetype.Name
-		Task.Status = dto.Fields.Status.Name
-
-		Task.CreatedAt, _ = time.Parse("2006-01-02T15:04:05.000Z", dto.Fields.Created.(string))
-		Task.UpdatedAt, _ = time.Parse("2006-01-02T15:04:05.000Z", dto.Fields.Updated.(string))
-
-		if dto.Fields.TimeOriginalEstimate > 0 {
-			Task.TimeEstimateHours = int(math.Ceil(float64(dto.Fields.TimeOriginalEstimate) / 60 / 60))
+		Task.Summary = dto.FieldsStruct.Summary
+		Task.Type = dto.FieldsStruct.Issuetype.Name
+		Task.Status = dto.FieldsStruct.Status.Name
+		if service.CustomFieldObjective != "" && dto.FieldsMap[service.CustomFieldObjective] != nil {
+			Task.Objective = dto.FieldsMap[service.CustomFieldObjective].(string)
 		}
-		if dto.Fields.TimeSpent > 0 {
-			Task.TimeSpentHours = int(math.Ceil(float64(dto.Fields.TimeSpent) / 60 / 60))
+		if service.CustomFieldTaskType != "" && dto.FieldsMap[service.CustomFieldTaskType] != nil {
+			type CustomFieldTaskTypeStruct struct {
+				Value string
+			}
+			customFieldTaskType := new(CustomFieldTaskTypeStruct)
+			byteCustomFieldTaskType, _ := json.Marshal(dto.FieldsMap[service.CustomFieldTaskType])
+			json.Unmarshal(byteCustomFieldTaskType, &customFieldTaskType)
+			Task.TaskType = customFieldTaskType.Value
 		}
 
-		for _, comment := range dto.Fields.Comment.Comments {
+		Task.CreatedAt, _ = time.Parse("2006-01-02T15:04:05.000Z", dto.FieldsStruct.Created.(string))
+		Task.UpdatedAt, _ = time.Parse("2006-01-02T15:04:05.000Z", dto.FieldsStruct.Updated.(string))
+
+		if dto.FieldsStruct.TimeOriginalEstimate > 0 {
+			Task.TimeEstimateHours = int(math.Ceil(float64(dto.FieldsStruct.TimeOriginalEstimate) / 60 / 60))
+		}
+		if dto.FieldsStruct.TimeSpent > 0 {
+			Task.TimeSpentHours = int(math.Ceil(float64(dto.FieldsStruct.TimeSpent) / 60 / 60))
+		}
+
+		for _, comment := range dto.FieldsStruct.Comment.Comments {
 			oComment := DomainEntity.ProjectComment{}
 			oComment.Body = comment.Body
 			oComment.CreatedAt, _ = time.Parse("2006-01-02T15:04:05.000Z", comment.Created.(string))
@@ -169,30 +192,30 @@ func (service JiraTaskService) parseToTasks(rows []interface{}, sprints []Domain
 			Task.Comments = append(Task.Comments, oComment)
 		}
 
-		for _, subtask := range dto.Fields.Subtasks {
+		for _, subtask := range dto.FieldsStruct.Subtasks {
 			dtoSub := allDTOs[subtask.Key]
 			Task.Assignees = append(Task.Assignees, DomainEntity.ProjectUserExecutor{
 				User: DomainEntity.ProjectUser{
-					Id:        dtoSub.Fields.Assignee.AccountId,
-					Email:     dtoSub.Fields.Assignee.EmailAddress,
-					Name:      dtoSub.Fields.Assignee.DisplayName,
-					AvatarUrl: dtoSub.Fields.Assignee.AvatarUrls.Image,
+					Id:        dtoSub.FieldsStruct.Assignee.AccountId,
+					Email:     dtoSub.FieldsStruct.Assignee.EmailAddress,
+					Name:      dtoSub.FieldsStruct.Assignee.DisplayName,
+					AvatarUrl: dtoSub.FieldsStruct.Assignee.AvatarUrls.Image,
 				},
 				ContributionPerc: 0,
 			})
 		}
 
 		Task.Reporter = DomainEntity.ProjectUser{
-			Id:        dto.Fields.Reporter.AccountId,
-			Email:     dto.Fields.Reporter.EmailAddress,
-			Name:      dto.Fields.Reporter.DisplayName,
-			AvatarUrl: dto.Fields.Reporter.AvatarUrls.Image,
+			Id:        dto.FieldsStruct.Reporter.AccountId,
+			Email:     dto.FieldsStruct.Reporter.EmailAddress,
+			Name:      dto.FieldsStruct.Reporter.DisplayName,
+			AvatarUrl: dto.FieldsStruct.Reporter.AvatarUrls.Image,
 		}
 
 		Task.Epic = DomainEntity.ProjectEpic{
-			Key:     dto.Fields.Parent.Key,
-			Summary: dto.Fields.Parent.Fields.Summary,
-			Status:  dto.Fields.Parent.Fields.Status.Name,
+			Key:     dto.FieldsStruct.Parent.Key,
+			Summary: dto.FieldsStruct.Parent.Fields.Summary,
+			Status:  dto.FieldsStruct.Parent.Fields.Status.Name,
 		}
 
 		for _, sprint := range sprints {

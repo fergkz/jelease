@@ -25,9 +25,13 @@ func main() {
 
 	config := new(struct {
 		Jira struct {
-			Username    string
-			AccessToken string
-			Hostname    string
+			Username     string
+			AccessToken  string
+			Hostname     string
+			CustomFields []struct {
+				TaskObjective string
+				TaskType      string
+			}
 		}
 		Server struct {
 			Port string
@@ -50,13 +54,28 @@ func main() {
 		}
 	}
 
+	jiraTaskService := InfrastructureService.NewJiraTaskService(
+		config.Jira.Username,
+		config.Jira.AccessToken,
+		config.Jira.Hostname,
+		config.Jira.CustomFields[0].TaskObjective,
+		config.Jira.CustomFields[0].TaskType,
+	)
+
 	router := mux.NewRouter()
 	releaseNotesController := InfrastructureController.NewReleaseNotesController(
-		InfrastructureService.NewJiraTaskService(config.Jira.Username, config.Jira.AccessToken, config.Jira.Hostname),
+		jiraTaskService,
 		InfrastructureService.NewRenderHtmlService("template.twig"),
 		replaceMembers,
 	)
 	router.HandleFunc("/sprint/{SprintId:[0-9]+}", releaseNotesController.Get).Methods("GET")
+
+	releaseNotesControllerV2 := InfrastructureController.NewReleaseNotesControllerV2(
+		jiraTaskService,
+		InfrastructureService.NewRenderHtmlService("templatev2.twig"),
+		replaceMembers,
+	)
+	router.HandleFunc("/v2/board/{BoardId:[0-9]+}/sprint/{SprintId:[0-9]+}", releaseNotesControllerV2.Get).Methods("GET")
 
 	if viper.GetString("server.method") == "http" {
 		fmt.Printf("Server started at port %s", config.Server.Port)
