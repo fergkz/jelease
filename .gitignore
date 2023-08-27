@@ -3,3 +3,4 @@ config.yml
 template.twig
 templatev2.twig
 debug*
+cache*

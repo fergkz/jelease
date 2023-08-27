@@ -2,7 +2,7 @@ package InfrastructureService
 
 import (
 	"bytes"
-	"fmt"
+	"log"
 	"path/filepath"
 
 	DomainService "github.com/fergkz/jelease/src/Domain/Service"
@@ -58,7 +58,7 @@ func (service renderHtmlService) Parse(members []DomainService.RenderHtmlService
 	var b bytes.Buffer
 	err := render.Execute(filename, &b, nParams)
 	if err != nil {
-		fmt.Println(err)
+		log.Fatalln(err)
 	}
 
 	rendered := DomainService.RenderHtmlServiceHtmlRendered{}

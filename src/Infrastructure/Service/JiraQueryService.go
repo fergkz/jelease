@@ -46,7 +46,7 @@ func (service jiraQueryService) Query(JQL string) (rows []interface{}) {
 	for {
 		url := service.Hostname + "/rest/api/2/search?jql=" + JQL + "&maxResults=" + strconv.Itoa(maxResults) + "&startAt=" + strconv.Itoa(currentIndex) + "&expand=changelog&fields=*all"
 
-		service.api("GET", url, &responseFull)
+		service.Api("GET", url, &responseFull)
 
 		if len(responseFull.Issues) == 0 {
 			break
@@ -74,7 +74,7 @@ func (service jiraQueryService) GetSprints(SprintIds []DomainEntity.ProjectSprin
 			OriginBoardId int
 			State         string
 		}
-		service.api("GET", url, &response)
+		service.Api("GET", url, &response)
 
 		sprint := DomainEntity.ProjectSprint{
 			Id:            DomainEntity.ProjectSprintId(response.Id),
@@ -104,12 +104,16 @@ func (service jiraQueryService) GetBoardData(BoardId DomainEntity.ProjectBoardId
 	url := service.Hostname + "/rest/agile/1.0/board/" + strconv.Itoa(int(BoardId))
 
 	response := new(DomainEntity.ProjectBoard)
-	service.api("GET", url, &response)
+	service.Api("GET", url, &response)
 
 	return *response
 }
 
-func (service jiraQueryService) api(method string, url string, responseFull interface{}) (err error) {
+func (service jiraQueryService) Test() {
+
+}
+
+func (service jiraQueryService) Api(method string, url string, responseFull interface{}) (err error) {
 
 	client := &http.Client{}
 	req, err := http.NewRequest(method, url, nil)
@@ -145,4 +149,37 @@ func (service jiraQueryService) api(method string, url string, responseFull inte
 	json.Unmarshal(body, &responseFull)
 
 	return nil
+}
+
+func (service jiraQueryService) ApiStr(method string, url string) (response []byte, err error) {
+
+	client := &http.Client{}
+	req, err := http.NewRequest(method, url, nil)
+
+	if err != nil {
+		log.Panicln("TaskerInfrastructureService.TaskService.jiraApi", "ERROR:http.NewRequest\n", err)
+		return nil, err
+	}
+
+	auth := base64.StdEncoding.EncodeToString([]byte(service.Username + ":" + service.AccessToken))
+
+	req.Header.Add("Authorization", "Basic "+auth)
+
+	res, err := client.Do(req)
+	if err == nil && res.StatusCode != 200 {
+		err = errors.New("STATUS RESPONSE: " + strconv.Itoa(res.StatusCode) + " - " + http.StatusText(res.StatusCode))
+		log.Panicln("ERROR: ", err)
+	}
+	if err != nil {
+		log.Panicln("TaskerInfrastructureService.TaskService.jiraApi", "ERROR:client.Do\n", err)
+	}
+
+	defer res.Body.Close()
+
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		log.Panicln("TaskerInfrastructureService.TaskService.jiraApi", "ERROR:ioutil.ReadAll\n", err)
+	}
+
+	return body, nil
 }

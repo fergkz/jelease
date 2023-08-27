@@ -1,129 +1,190 @@
 package ApplicationUsecase
 
 import (
+	"bytes"
+	_ "embed"
+	"encoding/base64"
+	"log"
+	"net/http"
+	"strings"
+	"time"
+
 	DomainEntity "github.com/fergkz/jelease/src/Domain/Entity"
 	DomainService "github.com/fergkz/jelease/src/Domain/Service"
+	DomainTool "github.com/fergkz/jelease/src/Domain/Tool"
+	"github.com/tyler-sommer/stick"
 )
 
 type generateReleaseNotesSprintHtmlV2 struct {
 	TasksRequestService DomainService.TasksRequestService
-	RenderHtmlService   DomainService.RenderHtmlService
+	JiraQueryService    DomainService.JiraQueryService
 	ReplaceTeamMembers  map[string]DomainService.RenderHtmlServiceTeamMember
+	TemplateFilename    string
+	HostnamePrefix      string
 }
 
 func NewGenerateReleaseNotesSprintHtmlV2(
 	TasksRequestService DomainService.TasksRequestService,
-	RenderHtmlService DomainService.RenderHtmlService,
+	JiraQueryService DomainService.JiraQueryService,
 	ReplaceTeamMembers map[string]DomainService.RenderHtmlServiceTeamMember,
+	TemplateFilename string,
+	HostnamePrefix string,
 ) *generateReleaseNotesSprintHtmlV2 {
 	usecase := new(generateReleaseNotesSprintHtmlV2)
 	usecase.TasksRequestService = TasksRequestService
-	usecase.RenderHtmlService = RenderHtmlService
+	usecase.JiraQueryService = JiraQueryService
 	usecase.ReplaceTeamMembers = ReplaceTeamMembers
+	usecase.TemplateFilename = TemplateFilename
+	usecase.HostnamePrefix = HostnamePrefix
 	return usecase
 }
 
-func (usecase *generateReleaseNotesSprintHtmlV2) Run(sprintIds []DomainEntity.ProjectSprintId) string {
+type RenderHtmlDaoTask struct {
+	Task     DomainEntity.ProjectTask
+	TaskLink string
+	Users    map[string]DomainEntity.ProjectUser
+}
 
-	tasks := []DomainEntity.ProjectTask{}
-	tasks, _ = usecase.TasksRequestService.GetTasksFromSprints(sprintIds)
+type RenderHtmlDaoType struct {
+	Tasks map[string]RenderHtmlDaoTask
+}
 
-	members := []DomainService.RenderHtmlServiceTeamMember{}
-	systems := []DomainService.RenderHtmlServiceSystemUpdated{}
+type RenderHtmlDaoEpic struct {
+	Epic  DomainEntity.ProjectEpic
+	Types map[string]RenderHtmlDaoType
+}
 
-	systemNotes := map[string][]DomainService.RenderHtmlServiceSystemUpdatedNote{}
-	membersMap := map[string]DomainService.RenderHtmlServiceTeamMember{}
-	taskNoteIsset := map[string]bool{}
+type RenderHtmlDao struct {
+	Board  DomainEntity.ProjectBoard
+	Sprint DomainEntity.ProjectSprint
+	Epics  map[string]RenderHtmlDaoEpic
+	Users  map[string]DomainEntity.ProjectUser
+}
+
+func (usecase *generateReleaseNotesSprintHtmlV2) Run(
+	boardId DomainEntity.ProjectBoardId,
+	sprintIds []DomainEntity.ProjectSprintId,
+) string {
+
+	dao := RenderHtmlDao{
+		Board:  usecase.JiraQueryService.GetBoardData(boardId),
+		Sprint: usecase.JiraQueryService.GetSprints(sprintIds)[0],
+		Epics:  make(map[string]RenderHtmlDaoEpic),
+		Users:  make(map[string]DomainEntity.ProjectUser),
+	}
+
+	tasks, _ := usecase.TasksRequestService.GetTasksFromSprints(sprintIds)
 
 	for _, task := range tasks {
 
-		note := usecase.taskToNote(task, task.Summary, task.Objective, task.TaskType, "")
-
-		for _, m := range note.Assignees {
-			membersMap[m.Email] = m
-		}
-
-		systemNotes[task.Epic.Summary] = append(systemNotes[task.Epic.Summary], note)
-
-		taskNoteIsset[task.Key] = true
-
-		if _, ok := taskNoteIsset[task.Key]; !ok {
-			note := usecase.taskToNote(task, "", "", "", "")
-			for _, m := range note.Assignees {
-				membersMap[m.Email] = m
+		if _, ok := dao.Epics[task.Epic.Summary]; !ok {
+			dao.Epics[task.Epic.Summary] = RenderHtmlDaoEpic{
+				Epic:  task.Epic,
+				Types: make(map[string]RenderHtmlDaoType),
 			}
-			systemNotes[task.Epic.Summary] = append(systemNotes[task.Epic.Summary], note)
 		}
+
+		if _, ok := dao.Epics[task.Epic.Summary].Types[task.TaskType]; !ok {
+			dao.Epics[task.Epic.Summary].Types[task.TaskType] = RenderHtmlDaoType{
+				Tasks: make(map[string]RenderHtmlDaoTask),
+			}
+		}
+
+		users := make(map[string]DomainEntity.ProjectUser)
+
+		for _, user := range task.Assignees {
+			if user.User.Email != "" {
+				users[user.User.Email] = user.User
+			}
+		}
+
+		if task.Reporter.Email != "" {
+			users[task.Reporter.Email] = task.Reporter
+		}
+
+		for _, user := range task.Comments {
+			if user.User.Email != "" {
+				if !strings.Contains(strings.ToLower(user.User.Name), "automation") {
+					users[user.User.Email] = user.User
+				}
+			}
+		}
+
+		if _, ok := dao.Epics[task.Epic.Summary].Types[task.TaskType].Tasks[task.Key]; !ok {
+			dao.Epics[task.Epic.Summary].Types[task.TaskType].Tasks[task.Key] = RenderHtmlDaoTask{
+				Task:     task,
+				TaskLink: usecase.HostnamePrefix + "/browse/" + task.Key,
+				Users:    users,
+			}
+		}
+
+		for _, user := range users {
+			dao.Users[user.Email] = user
+		}
+
+		if task.Key == "BACKSHIP-4018" {
+			DomainTool.Pretty.Save(task, "debug-test.task.json")
+		}
+
 	}
 
-	for system, notes := range systemNotes {
-		systems = append(systems, DomainService.RenderHtmlServiceSystemUpdated{
-			SystemName: system,
-			Notes:      notes,
-		})
-	}
+	DomainTool.Pretty.Save(dao, "debug-test.dao.json")
 
-	for _, member := range membersMap {
-		members = append(members, member)
-	}
+	rendered := usecase.RenderHtml(dao)
 
-	rendered := usecase.RenderHtmlService.Parse(members, systems)
-
-	return rendered.HtmlContent
+	return rendered
 }
 
-func (usecase *generateReleaseNotesSprintHtmlV2) taskToNote(task DomainEntity.ProjectTask, cTitle, cDescr, cType, cSystem string) (note DomainService.RenderHtmlServiceSystemUpdatedNote) {
-	note.Title = task.Summary
-	if cTitle != "" {
-		note.Title = cTitle
-	}
-	note.Type = task.Type
-	if cType != "" {
-		note.Type = cType
-	}
-	note.TextMessage = ""
-	if cDescr != "" {
-		note.TextMessage = cDescr
+//go:embed GenerateReleaseNotesSprintHtmlV2.twig
+var templateRenderTwig []byte
+
+func (usecase *generateReleaseNotesSprintHtmlV2) RenderHtml(dao RenderHtmlDao) string {
+	env := stick.New(nil)
+	env.Filters["split"] = func(ctx stick.Context, val stick.Value, args ...stick.Value) stick.Value {
+		return strings.Split(stick.CoerceString(val), stick.CoerceString(args[0]))
 	}
 
-	note.Status = task.Status
+	env.Filters["imageBase"] = func(ctx stick.Context, val stick.Value, args ...stick.Value) stick.Value {
+		imgdata := usecase.urlImageToData(stick.CoerceString(val))
+		return imgdata
+	}
 
-	assigneeIsset := map[string]bool{}
-	note.Assignees = []DomainService.RenderHtmlServiceTeamMember{}
-	for _, assignee := range task.Assignees {
-		if !assigneeIsset[assignee.User.Email] && assignee.User.Email != "" {
-
-			newDisplayName := assignee.User.Name
-			newFullName := assignee.User.Name
-			newOffice := assignee.User.Email
-			newPublicImageUrl := assignee.User.AvatarUrl
-
-			if data, ok := usecase.ReplaceTeamMembers[assignee.User.Email]; ok {
-				if data.DisplayName != "" {
-					newDisplayName = data.DisplayName
-				}
-				if data.Office != "" {
-					newOffice = data.Office
-				}
-			}
-
-			member := DomainService.RenderHtmlServiceTeamMember{
-				DisplayName:    newDisplayName,
-				FullName:       newFullName,
-				Office:         newOffice,
-				PublicImageUrl: newPublicImageUrl,
-				Email:          assignee.User.Email,
-			}
-			note.Assignees = append(note.Assignees, member)
-			assigneeIsset[assignee.User.Email] = true
+	env.Filters["brDate"] = func(ctx stick.Context, val stick.Value, args ...stick.Value) stick.Value {
+		originDt := stick.CoerceString(val)
+		layout := "2006-01-02 15:04:05 -0700 UTC"
+		parsedTime, err := time.Parse(layout, originDt)
+		if err != nil {
+			log.Fatal(err)
 		}
+		return parsedTime.Format("02/01/2006")
 	}
 
-	note.Links = []DomainService.RenderHtmlServiceLink{}
-	note.Links = append(note.Links, DomainService.RenderHtmlServiceLink{
-		Title:     task.Key,
-		PublicUrl: task.PublicHtmlUrl,
-	})
+	nParams := map[string]stick.Value{}
+	nParams["dao"] = dao
 
-	return note
+	var b bytes.Buffer
+	if err := env.Execute(string(templateRenderTwig), &b, nParams); err != nil {
+		log.Fatal(err)
+	}
+
+	return b.String()
+}
+
+func (usecase *generateReleaseNotesSprintHtmlV2) urlImageToData(url string) string {
+	img, err := usecase.JiraQueryService.ApiStr(
+		"GET",
+		url,
+	)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	contentType := http.DetectContentType([]byte(img))
+
+	if strings.Contains(strings.ToLower(string(img)), "</svg>") {
+		contentType = "image/svg+xml"
+	}
+
+	return "data:" + contentType + ";base64," + base64.StdEncoding.EncodeToString(img)
 }

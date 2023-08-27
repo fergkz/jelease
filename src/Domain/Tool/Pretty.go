@@ -6,6 +6,9 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 )
 
 type pretty struct{}
@@ -62,15 +65,66 @@ func CoalesceString(strs ...string) string {
 	return nText
 }
 
-func (Pretty pretty) GetCache(filename string, value interface{}) {
-	b, err := ioutil.ReadFile(filename)
+func (Pretty pretty) GetCache(dirname string, value interface{}) bool {
+
+	dirname = strings.TrimRight(dirname, "/") + "/"
+
+	fss, err := ioutil.ReadDir(dirname)
 	if err != nil {
-		return
+		return false
 	}
-	json.Unmarshal(b, value)
+
+	if len(fss) == 0 {
+		return false
+	}
+
+	for _, fs := range fss {
+		timemilit := strings.Split(fs.Name(), ".")
+
+		i, err := strconv.ParseInt(timemilit[0], 10, 64)
+		if err != nil {
+			log.Panic(err)
+		}
+		timeFile := time.Unix(i, 0)
+
+		if timeFile.Before(time.Now()) {
+			return false
+		}
+
+		b, err := ioutil.ReadFile(dirname + fs.Name())
+		if err != nil {
+			log.Panic(err)
+		}
+
+		json.Unmarshal(b, value)
+		return true
+	}
+
+	return false
 }
 
-func (Pretty pretty) SetCache(filename string, value interface{}) {
-	file, _ := json.MarshalIndent(value, "", " ")
-	_ = ioutil.WriteFile(filename, file, 0644)
+func (Pretty pretty) SetCache(dirname string, value interface{}, expireSecs int) {
+
+	var nvalue interface{} = value
+
+	dirname = strings.TrimRight(dirname, "/") + "/"
+
+	fss, err := ioutil.ReadDir(dirname)
+	if err != nil {
+		if err := os.MkdirAll(dirname, os.ModePerm); err != nil {
+			log.Panic(err)
+		}
+	}
+
+	for _, fs := range fss {
+		filePath := dirname + fs.Name()
+		os.Remove(filePath)
+	}
+
+	inSecs := int(time.Now().Unix()) + expireSecs
+
+	cacheFilename := dirname + "/" + strconv.Itoa(inSecs) + ".json"
+
+	file, _ := json.Marshal(nvalue)
+	_ = ioutil.WriteFile(cacheFilename, file, 0644)
 }

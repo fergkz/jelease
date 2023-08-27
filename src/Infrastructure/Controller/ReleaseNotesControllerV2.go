@@ -8,25 +8,30 @@ import (
 	ApplicationUsecase "github.com/fergkz/jelease/src/Application/Usecase"
 	DomainEntity "github.com/fergkz/jelease/src/Domain/Entity"
 	DomainService "github.com/fergkz/jelease/src/Domain/Service"
-	DomainTool "github.com/fergkz/jelease/src/Domain/Tool"
 	"github.com/gorilla/mux"
 )
 
 type releaseNotesControllerV2 struct {
 	TasksRequestService DomainService.TasksRequestService
-	RenderHtmlService   DomainService.RenderHtmlService
+	JiraQueryService    DomainService.JiraQueryService
 	ReplaceTeamMembers  map[string]DomainService.RenderHtmlServiceTeamMember
+	TemplateFilename    string
+	HostnamePrefix      string
 }
 
 func NewReleaseNotesControllerV2(
 	TasksRequestService DomainService.TasksRequestService,
-	RenderHtmlService DomainService.RenderHtmlService,
+	JiraQueryService DomainService.JiraQueryService,
 	ReplaceTeamMembers map[string]DomainService.RenderHtmlServiceTeamMember,
+	TemplateFilename string,
+	HostnamePrefix string,
 ) *releaseNotesControllerV2 {
 	controller := new(releaseNotesControllerV2)
 	controller.TasksRequestService = TasksRequestService
-	controller.RenderHtmlService = RenderHtmlService
+	controller.JiraQueryService = JiraQueryService
 	controller.ReplaceTeamMembers = ReplaceTeamMembers
+	controller.TemplateFilename = TemplateFilename
+	controller.HostnamePrefix = HostnamePrefix
 	return controller
 }
 
@@ -41,16 +46,17 @@ func (controller *releaseNotesControllerV2) Get(w http.ResponseWriter, r *http.R
 	sprintId := mux.Vars(r)["SprintId"]
 	sprintIdInt, _ := strconv.Atoi(sprintId)
 
-	DomainTool.Pretty.Println("BOARD ID", boardIdInt)
-	DomainTool.Pretty.Println("SPRINT ID", sprintId)
-	// os.Exit(0)
-
 	usecase := ApplicationUsecase.NewGenerateReleaseNotesSprintHtmlV2(
 		controller.TasksRequestService,
-		controller.RenderHtmlService,
+		controller.JiraQueryService,
 		controller.ReplaceTeamMembers,
+		controller.TemplateFilename,
+		controller.HostnamePrefix,
 	)
-	html := usecase.Run([]DomainEntity.ProjectSprintId{DomainEntity.ProjectSprintId(sprintIdInt)})
+	html := usecase.Run(
+		DomainEntity.ProjectBoardId(boardIdInt),
+		[]DomainEntity.ProjectSprintId{DomainEntity.ProjectSprintId(sprintIdInt)},
+	)
 
 	io.WriteString(w, string(html))
 }

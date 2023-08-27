@@ -62,6 +62,12 @@ func main() {
 		config.Jira.CustomFields[0].TaskType,
 	)
 
+	jiraQueryService := InfrastructureService.NewJiraQueryService(
+		config.Jira.Username,
+		config.Jira.AccessToken,
+		config.Jira.Hostname,
+	)
+
 	router := mux.NewRouter()
 	releaseNotesController := InfrastructureController.NewReleaseNotesController(
 		jiraTaskService,
@@ -72,8 +78,10 @@ func main() {
 
 	releaseNotesControllerV2 := InfrastructureController.NewReleaseNotesControllerV2(
 		jiraTaskService,
-		InfrastructureService.NewRenderHtmlService("templatev2.twig"),
+		jiraQueryService,
 		replaceMembers,
+		"templatev2.twig",
+		config.Jira.Hostname,
 	)
 	router.HandleFunc("/v2/board/{BoardId:[0-9]+}/sprint/{SprintId:[0-9]+}", releaseNotesControllerV2.Get).Methods("GET")
 

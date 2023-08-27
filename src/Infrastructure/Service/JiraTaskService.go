@@ -8,6 +8,7 @@ import (
 	"time"
 
 	DomainEntity "github.com/fergkz/jelease/src/Domain/Entity"
+	DomainTool "github.com/fergkz/jelease/src/Domain/Tool"
 )
 
 type JiraTaskService struct {
@@ -46,9 +47,14 @@ func (service JiraTaskService) GetTasksFromSprints(SprintIds []DomainEntity.Proj
 		sprint IN (` + sprintsIdsStr + `) order by rank ASC
 	`
 
-	rows := service.jiraQueryService.Query(jql)
+	response := new([]interface{})
+	cacheFilename := "cache/sprint-" + sprintsIdsStr
+	if !DomainTool.Pretty.GetCache(cacheFilename, response) {
+		*response = service.jiraQueryService.Query(jql)
+		DomainTool.Pretty.SetCache(cacheFilename, response, 60000)
+	}
 
-	Tasks = service.parseToTasks(rows, Sprints)
+	Tasks = service.parseToTasks(*response, Sprints)
 
 	return Tasks, Sprints
 }
@@ -126,6 +132,27 @@ func (service JiraTaskService) parseToTasks(rows []interface{}, sprints []Domain
 			}
 		}
 		FieldsMap map[string]interface{} `json:"fields"`
+		Changelog struct {
+			Histories []struct {
+				Author struct {
+					AccountId    string
+					EmailAddress string
+					DisplayName  string
+					AvatarUrls   struct {
+						Image string `json:"48x48"`
+					}
+				}
+				Created interface{} //"2022-09-01T15:05:11.156-0300"
+				Items   []struct {
+					From       string
+					To         string
+					FromString string
+					ToString   string
+					Field      string
+					FieldId    string
+				}
+			}
+		}
 	}
 
 	allDTOs := map[string]taskDTOStruct{}
@@ -140,11 +167,14 @@ func (service JiraTaskService) parseToTasks(rows []interface{}, sprints []Domain
 		_ = json.Unmarshal(dbByte, &dto.FieldsStruct)
 
 		allDTOs[dto.Key] = *dto
+		DomainTool.Pretty.SetCache("cache/issues/"+dto.Key, row, 0)
+		DomainTool.Pretty.SetCache("cache/tasks/"+dto.Key, dto, 0)
 
 		if !dto.FieldsStruct.Issuetype.Subtask {
 			allOrderedKeys = append(allOrderedKeys, dto.Key)
 		}
 	}
+	issetUserSet := map[string]bool{}
 
 	for _, key := range allOrderedKeys {
 		dto := allDTOs[key]
@@ -192,17 +222,46 @@ func (service JiraTaskService) parseToTasks(rows []interface{}, sprints []Domain
 			Task.Comments = append(Task.Comments, oComment)
 		}
 
+		Task.Assignees = append(Task.Assignees, DomainEntity.ProjectUserExecutor{
+			User: DomainEntity.ProjectUser{
+				Id:        dto.FieldsStruct.Assignee.AccountId,
+				Email:     dto.FieldsStruct.Assignee.EmailAddress,
+				Name:      dto.FieldsStruct.Assignee.DisplayName,
+				AvatarUrl: dto.FieldsStruct.Assignee.AvatarUrls.Image,
+			},
+			ContributionPerc: 0,
+		})
+		issetUserSet[Task.Key+dto.FieldsStruct.Assignee.EmailAddress] = true
+
 		for _, subtask := range dto.FieldsStruct.Subtasks {
 			dtoSub := allDTOs[subtask.Key]
-			Task.Assignees = append(Task.Assignees, DomainEntity.ProjectUserExecutor{
-				User: DomainEntity.ProjectUser{
-					Id:        dtoSub.FieldsStruct.Assignee.AccountId,
-					Email:     dtoSub.FieldsStruct.Assignee.EmailAddress,
-					Name:      dtoSub.FieldsStruct.Assignee.DisplayName,
-					AvatarUrl: dtoSub.FieldsStruct.Assignee.AvatarUrls.Image,
-				},
-				ContributionPerc: 0,
-			})
+			if !issetUserSet[Task.Key+dtoSub.FieldsStruct.Assignee.EmailAddress] {
+				Task.Assignees = append(Task.Assignees, DomainEntity.ProjectUserExecutor{
+					User: DomainEntity.ProjectUser{
+						Id:        dtoSub.FieldsStruct.Assignee.AccountId,
+						Email:     dtoSub.FieldsStruct.Assignee.EmailAddress,
+						Name:      dtoSub.FieldsStruct.Assignee.DisplayName,
+						AvatarUrl: dtoSub.FieldsStruct.Assignee.AvatarUrls.Image,
+					},
+					ContributionPerc: 0,
+				})
+			}
+			issetUserSet[Task.Key+dtoSub.FieldsStruct.Assignee.EmailAddress] = true
+		}
+
+		for _, history := range dto.Changelog.Histories {
+			if issetUserSet[Task.Key+history.Author.EmailAddress] {
+				Task.Assignees = append(Task.Assignees, DomainEntity.ProjectUserExecutor{
+					User: DomainEntity.ProjectUser{
+						Id:        history.Author.AccountId,
+						Email:     history.Author.EmailAddress,
+						Name:      history.Author.DisplayName,
+						AvatarUrl: history.Author.AvatarUrls.Image,
+					},
+					ContributionPerc: 0,
+				})
+			}
+			issetUserSet[Task.Key+history.Author.EmailAddress] = true
 		}
 
 		Task.Reporter = DomainEntity.ProjectUser{
