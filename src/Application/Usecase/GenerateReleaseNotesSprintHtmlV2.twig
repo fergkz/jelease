@@ -17,9 +17,10 @@
             style="height: 35px; width: auto; vertical-align: top;"
             src="{{dao.Board.Location.AvatarURI|imageBase}}" />
       {{dao.Board.Location.ProjectName}}
-      {{dao.Sprint.Name}}
     </h1>
-    <p>{{dao.Sprint.StartDate|brDate}} a {{dao.Sprint.EndDate|brDate}}</p>
+    <h2>
+      {{dao.Sprint.Name}} - <small>{{dao.Sprint.StartDate|brDate}} a {{dao.Sprint.EndDate|brDate}}</small>
+    </h2>
     <p>Objetivos: {{dao.Sprint.Goal}}</p>
     </center>
   </header>
@@ -28,7 +29,9 @@
     <article class="post-card post-access-public">
       <div class="post-card-inner">
         <header class="post-card-header">
-          <h3 class="post-card-title"><a href="javascript:void(0)" style="color: #ff7f0f">{{EpicName}}</a></h3>
+          <h3 class="post-card-title">
+            <a href="javascript:void(0)" style="color: #ff7f0f; font-size: 18px;">{{EpicName}}</a>
+          </h3>
         </header>
 
         <div class="post-card-content">
@@ -59,6 +62,10 @@
                        style="border-radius: 50%; height: 20px; float: left; margin: 0 8px 0 0; width: 25px; height: 25px;"
                        src="{{user.AvatarUrl|imageBase}}" />
                   {% endfor %}
+
+                  <a style="color: rgb(0 208 255); font-size: 11px; float: left; line-height: 25px; font-weight: bold;"
+                    target="_blank"
+                    href="{{TaskRow.TaskLink}}">{{TaskRow.Task.Key}}</a>
 
                 </div>
 
